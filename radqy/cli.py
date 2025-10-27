@@ -19,8 +19,10 @@ def run_cli():
    # Required arguments
     parser.add_argument('output_folder_name', nargs='?', type=str, help="The subfolder name in the '...\\UserInterface\\Data\\output_folder_name' directory.")
     parser.add_argument('inputdir', nargs='*', help="Input folder name consisting of *.dcm, *.mha, *.nii or *.mat files. For example: 'E:\\Data\\Rectal\\input_data_folder'")
-   
+    
     # Optional arguments
+    parser.add_argument('-m', help="read manifest file", type=str, default=None)
+
     parser.add_argument('-s', help="save foreground masks", type=lambda x: False if x == '0' else x, default=False)
     parser.add_argument('-b', help="number of samples", type=int, default=1)
     parser.add_argument('-u', help="percent of middle images", type=int, default=100)
@@ -28,7 +30,6 @@ def run_cli():
 
 
     args = parser.parse_args() 
-
     if args.ui_download:
         ui_download()
         ui_unzip()

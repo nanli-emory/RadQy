@@ -23,9 +23,13 @@ from skimage.filters import median
 from skimage.morphology import square
 from pathlib import Path
 # from scipy.io import loadmat
+import logging
+
 import warnings
 warnings.filterwarnings("ignore")
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.ERROR)
 
 
 # Utility functions
@@ -256,13 +260,28 @@ def extract_tags(image, tag_data, file_type='dicom', image_shape=None):
     return tags
 
 
+def input_data(root, manifest_path=None):
+
+    
+    if manifest_path:
+        files = []
+        df_manifest = pd.read_csv(manifest_path, dtype=str)
+        manifest_files = [str(Path(root) / row["PatientID"] / row["StudyInstanceUID"] / row["SeriesInstanceUID"] / f"{row['SOPInstanceUID']}.dcm") for index, row in df_manifest.iterrows()]
+        for f in manifest_files:
+            if os.path.exists(f):
+                files.append(f)
+            else:
+                msg = f"DICOM file [{f}] does not exist ... "
+                logger.error(msg)
 
 
-
-def input_data(root):
-    files = [str(Path(dirpath) / filename) for dirpath, _, filenames in os.walk(root)
-             for filename in filenames
-             if filename.endswith(('.dcm', '.mha', '.nii', '.gz', '.mat'))]
+    else:
+        files = [str(Path(dirpath) / filename) for dirpath, _, filenames in os.walk(root)
+                for filename in filenames
+                if filename.endswith(('.dcm', '.mha', '.nii', '.gz', '.mat'))]
+    if len(files) == 0:
+        print("No dicom files were found in the input dir.")
+        sys.exit(0)
 
     dicom_files = [i for i in files if i.endswith('.dcm')]
     mha_files = [i for i in files if i.endswith('.mha')]
@@ -287,6 +306,7 @@ def input_data(root):
             file_name = Path(dicom_file).stem
             dicom_combined_subjects.append(f"{file_name}_{patient_id}")
         except Exception as e:
+
             print(f"Could not read DICOM file: {dicom_file}. Error: {e}")
             dicom_pre_subjects.append("Unknown")
             dicom_combined_subjects.append(f"{Path(dicom_file).stem}_Unknown")
@@ -533,6 +553,8 @@ def main(args):
     global save_masks_flag, sample_size, middle_size, scan_type, fname_outdir, overwrite_flag, headers
 
     root = args.inputdir[0] if isinstance(args.inputdir, list) else args.inputdir
+    # add manifast file
+    manifest_file = args.m
     save_masks_flag = args.s
     sample_size = args.b
     middle_size = args.u
@@ -548,7 +570,22 @@ def main(args):
     headers.append(f"outdir:\t{Path(fname_outdir).resolve()}")
     headers.append(f"scantype:\t{scan_type}")
 
-    df = input_data(root)
+
+    # genearte log
+    Path(fname_outdir).mkdir(parents=True, exist_ok=True)
+    error_file_handler = logging.FileHandler(Path(fname_outdir) / 'error.log')
+    error_file_handler.setLevel(logging.ERROR)
+    # Create a formatter for the log messages
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    # Add the formatter to the file handler
+    error_file_handler.setFormatter(formatter)
+
+    # Add the file handler to the logger
+    logger.addHandler(error_file_handler)
+
+
+    df = input_data(root, manifest_file)
     total_participants = len(df)
 
     functions = [func for name, func in inspect.getmembers(sys.modules[__name__]) if name.startswith('func')]
