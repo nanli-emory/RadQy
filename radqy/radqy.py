@@ -78,6 +78,8 @@ def func4(F, B, c, f, b):
 
 def func5(F, B, c, f, b):
     name = 'CPP'
+    if len(F.shape) > 2:
+        return name, 0
     filt = np.array([[-1/8, -1/8, -1/8], [-1/8, 1, -1/8], [-1/8, -1/8, -1/8]])
     I_hat = conv2(F, filt, mode='same')
     measure = np.mean(clean_array(I_hat))
@@ -85,6 +87,8 @@ def func5(F, B, c, f, b):
 
 def func6(F, B, c, f, b):
     name = 'PSNR'
+    if len(F.shape) > 2:
+        return name, 0
     F = clean_array(F)
     max_val = np.max(F)
     if max_val <= 0:
@@ -105,6 +109,8 @@ def func7(F, B, c, f, b):
 
 def func8(F, B, c, f, b):
     name = 'SNR2'
+    if len(F.shape) > 2:
+        return name, 0
     b = clean_array(b)
     bg_std = np.std(b)
     measure = np.mean(patch(F, 5)) / (bg_std + 1e-9)
@@ -112,6 +118,8 @@ def func8(F, B, c, f, b):
 
 def func9(F, B, c, f, b):
     name = 'SNR3'
+    if len(F.shape) > 2:
+        return name, 0
     fore_patch = patch(F, 5)
     fore_patch = clean_array(fore_patch)
     std_diff = np.std(fore_patch - np.mean(fore_patch))
@@ -121,6 +129,8 @@ def func9(F, B, c, f, b):
 
 def func10(F, B, c, f, b):
     name = 'SNR4'
+    if len(F.shape) > 2:
+        return name, 0
     fore_patch = patch(F, 5)
     back_patch = patch(B, 5)
     fore_patch = clean_array(fore_patch)
@@ -132,6 +142,8 @@ def func10(F, B, c, f, b):
 
 def func11(F, B, c, f, b):
     name = 'SNR5'
+    if len(F.shape) > 2:
+        return name, 0
     window_size = 5
     local_variance = conv2(F**2, np.ones((window_size, window_size)), mode='valid') / window_size**2 - \
                      (conv2(F, np.ones((window_size, window_size)), mode='valid') / window_size)**2
@@ -158,6 +170,8 @@ def func15(F, B, c, f, b):
 
 def func16(F, B, c, f, b):
     name = 'CNR'
+    if len(F.shape) > 2:
+        return name, 0
     fore_patch = patch(F, 5)
     back_patch = patch(B, 5)
     fore_patch = clean_array(fore_patch)
@@ -167,6 +181,8 @@ def func16(F, B, c, f, b):
 
 def func17(F, B, c, f, b):
     name = 'CVP'
+    if len(F.shape) > 2:
+        return name, 0
     fore_patch = patch(F, 5)
     fore_patch = clean_array(fore_patch)
     measure = np.std(fore_patch) / (np.mean(fore_patch) + 1e-6)
@@ -352,7 +368,6 @@ def volume(name, scans, subject_type, tag_data, middle_size=100):
         scans = scans[int(0.005 * len(scans) * (100 - middle_size)):int(0.005 * len(scans) * (100 + middle_size))]
         inf = pydicom.dcmread(scans[0])
         tags = extract_tags(inf, tag_data, file_type='dicom')
-        
         # Convert tags to DataFrame if it's not already
         if isinstance(tags, dict):
             tags = pd.DataFrame.from_dict(tags, orient='index', columns=['Value']).reset_index()
