@@ -317,10 +317,14 @@ def input_data(root, manifest_path=None):
     for dicom_file in dicom_files:
         try:
             dcm_data = pydicom.dcmread(dicom_file)
-            patient_id = dcm_data.get("PatientID", "Unknown").strip()
-            dicom_pre_subjects.append(patient_id)
-            file_name = Path(dicom_file).stem
-            dicom_combined_subjects.append(f"{file_name}_{patient_id}")
+            if 'PixelData' in dcm_data:
+                patient_id = dcm_data.get("PatientID", "Unknown").strip()
+                dicom_pre_subjects.append(patient_id)
+                file_name = Path(dicom_file).stem
+                dicom_combined_subjects.append(f"{file_name}_{patient_id}")
+            else:
+                msg = f'DICOM file [{dicom_file}] does not have image pixel data ... '
+                logger.error(msg)
         except Exception as e:
 
             print(f"Could not read DICOM file: {dicom_file}. Error: {e}")
@@ -469,7 +473,8 @@ class IQM(dict):
         #     print(f'The number of {participant_scan_number} masks were also saved to {maskfolder / participant} directory.')
         
         # self.addToPrintList(1, participant, "Name of Images", os.listdir(directory_path), 25)
-        # count += 1
+        self.addToPrintList(1, participant, "Name of Images", directory_path, 25)
+        count += 1
         self.addToPrintList(count, participant, "NUM", participant_scan_number, total_metrics)
         averages = {}
         for key in outputs_list[0].keys():
@@ -605,6 +610,9 @@ def main(args):
 
     df = input_data(root, manifest_file)
     total_participants = len(df)
+    if total_participants == 0:
+        print("No participant found ...")
+        sys.exit(0)
 
     functions = [func for name, func in inspect.getmembers(sys.modules[__name__]) if name.startswith('func')]
     functions = sorted(functions, key=lambda f: int(re.search(r'\d+', f.__name__).group()))
