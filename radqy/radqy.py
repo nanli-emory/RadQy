@@ -299,7 +299,8 @@ def input_data(root, manifest_path=None):
         print("No dicom files were found in the input dir.")
         sys.exit(0)
 
-    dicom_files = [i for i in files if i.endswith('.dcm')]
+    all_dicom_files = [i for i in files if i.endswith('.dcm')]
+    
     mha_files = [i for i in files if i.endswith('.mha')]
     nifti_files = [i for i in files if i.endswith('.nii') or i.endswith('.gz')]
     mat_files = [i for i in files if i.endswith('.mat')]
@@ -313,16 +314,20 @@ def input_data(root, manifest_path=None):
     # Extract PatientID and construct file-based unique identifier
     dicom_pre_subjects = []
     dicom_combined_subjects = []
-
-    for dicom_file in dicom_files:
+    dicom_files = []
+    for dicom_file in all_dicom_files:
         try:
             dcm_data = pydicom.dcmread(dicom_file)
+            print(f'~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ {dicom_file}' )
             if 'PixelData' in dcm_data:
+                print(" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~` PixelData")
+                dicom_files.append(dicom_file)
                 patient_id = dcm_data.get("PatientID", "Unknown").strip()
                 dicom_pre_subjects.append(patient_id)
                 file_name = Path(dicom_file).stem
                 dicom_combined_subjects.append(f"{file_name}_{patient_id}")
             else:
+                print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ No PixelData")
                 msg = f'DICOM file [{dicom_file}] does not have image pixel data ... '
                 logger.error(msg)
         except Exception as e:
