@@ -79,7 +79,7 @@ def func4(F, B, c, f, b):
 def func5(F, B, c, f, b):
     name = 'CPP'
     if len(F.shape) > 2:
-        return name, 0
+        return name, 'RGB'
     filt = np.array([[-1/8, -1/8, -1/8], [-1/8, 1, -1/8], [-1/8, -1/8, -1/8]])
     I_hat = conv2(F, filt, mode='same')
     measure = np.mean(clean_array(I_hat))
@@ -88,7 +88,7 @@ def func5(F, B, c, f, b):
 def func6(F, B, c, f, b):
     name = 'PSNR'
     if len(F.shape) > 2:
-        return name, 0
+        return name, 'RGB'
     F = clean_array(F)
     max_val = np.max(F)
     if max_val <= 0:
@@ -110,7 +110,7 @@ def func7(F, B, c, f, b):
 def func8(F, B, c, f, b):
     name = 'SNR2'
     if len(F.shape) > 2:
-        return name, 0
+        return name, 'RGB'
     b = clean_array(b)
     bg_std = np.std(b)
     measure = np.mean(patch(F, 5)) / (bg_std + 1e-9)
@@ -119,7 +119,7 @@ def func8(F, B, c, f, b):
 def func9(F, B, c, f, b):
     name = 'SNR3'
     if len(F.shape) > 2:
-        return name, 0
+        return name, 'RGB'
     fore_patch = patch(F, 5)
     fore_patch = clean_array(fore_patch)
     std_diff = np.std(fore_patch - np.mean(fore_patch))
@@ -130,7 +130,7 @@ def func9(F, B, c, f, b):
 def func10(F, B, c, f, b):
     name = 'SNR4'
     if len(F.shape) > 2:
-        return name, 0
+        return name, 'RGB'
     fore_patch = patch(F, 5)
     back_patch = patch(B, 5)
     fore_patch = clean_array(fore_patch)
@@ -143,7 +143,7 @@ def func10(F, B, c, f, b):
 def func11(F, B, c, f, b):
     name = 'SNR5'
     if len(F.shape) > 2:
-        return name, 0
+        return name, 'RGB'
     window_size = 5
     local_variance = conv2(F**2, np.ones((window_size, window_size)), mode='valid') / window_size**2 - \
                      (conv2(F, np.ones((window_size, window_size)), mode='valid') / window_size)**2
@@ -171,7 +171,7 @@ def func15(F, B, c, f, b):
 def func16(F, B, c, f, b):
     name = 'CNR'
     if len(F.shape) > 2:
-        return name, 0
+        return name, 'RGB'
     fore_patch = patch(F, 5)
     back_patch = patch(B, 5)
     fore_patch = clean_array(fore_patch)
@@ -182,7 +182,7 @@ def func16(F, B, c, f, b):
 def func17(F, B, c, f, b):
     name = 'CVP'
     if len(F.shape) > 2:
-        return name, 0
+        return name, 'RGB'
     fore_patch = patch(F, 5)
     fore_patch = clean_array(fore_patch)
     measure = np.std(fore_patch) / (np.mean(fore_patch) + 1e-6)
@@ -424,10 +424,10 @@ class IQM(dict):
         self["warnings"] = [] 
         self["output"] = []
         directory_path = Path(fname_outdir) / participant
-        if save_masks_flag != False: 
-            maskfolder = Path(fname_outdir / 'foreground_masks')
-            (maskfolder / participant).mkdir(parents=True, exist_ok=True)
-        directory_path.mkdir(parents=True, exist_ok=True)
+        # if save_masks_flag != False: 
+        #     maskfolder = Path(fname_outdir / 'foreground_masks')
+        #     (maskfolder / participant).mkdir(parents=True, exist_ok=True)
+        # directory_path.mkdir(parents=True, exist_ok=True)
         self.addToPrintList(0, participant, "Participant", participant, 25)
         count = 1
         for volume_data in v:
@@ -452,12 +452,12 @@ class IQM(dict):
         for j in range(0, images.shape[0], sample_size):
             I = images[j, :, :]
             folder = Path(fname_outdir)
-            self.save_image(participant, I, j, folder)
+            # self.save_image(participant, I, j, folder)
             if scan_type == "CT": 
                 I = I - np.min(I)  # Apply intensity adjustment only for CT scans 
             F, B, c, f, b = self.foreground(I)
-            if save_masks_flag != False: 
-                self.save_image(participant, c, j, maskfolder)
+            # if save_masks_flag != False: 
+            #     self.save_image(participant, c, j, maskfolder)
                 
             outputs = {}
             for func in metric_functions:
@@ -465,16 +465,19 @@ class IQM(dict):
                 outputs[name] = measure
             outputs_list.append(outputs)
         print(f'The number of {participant_scan_number} scans were saved to {fname_outdir / participant} directory.')
-        if save_masks_flag != False: 
-            print(f'The number of {participant_scan_number} masks were also saved to {maskfolder / participant} directory.')
+        # if save_masks_flag != False: 
+        #     print(f'The number of {participant_scan_number} masks were also saved to {maskfolder / participant} directory.')
         
-        self.addToPrintList(1, participant, "Name of Images", os.listdir(directory_path), 25)
+        # self.addToPrintList(1, participant, "Name of Images", os.listdir(directory_path), 25)
         # count += 1
         self.addToPrintList(count, participant, "NUM", participant_scan_number, total_metrics)
         averages = {}
         for key in outputs_list[0].keys():
             values = [dic[key] for dic in outputs_list]
-            averages[key] = np.mean(values) 
+            if all(isinstance(item, str) for item in values):
+                averages[key] = None
+            else:
+                averages[key] = np.mean(values) 
             count += 1
             self.addToPrintList(count, participant, key, averages[key], total_metrics)
 
@@ -667,5 +670,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', type=lambda x: False if x == '0' else x, default=False)
     parser.add_argument('-b', type=int, default=1)
     parser.add_argument('-u', type=int, default=100)
+    parser.add_argument('-m', type=str, default=None)
+    parser.add_argument('-t', type=str, default="MRI")
     args = parser.parse_args()
     main(args)
