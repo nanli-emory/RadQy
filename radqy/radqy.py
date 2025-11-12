@@ -22,15 +22,14 @@ from scipy.signal import convolve2d as conv2
 from skimage.filters import median
 from skimage.morphology import square
 from pathlib import Path
+import math
 # from scipy.io import loadmat
 import logging
-
 import warnings
 warnings.filterwarnings("ignore")
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
-
+log_formatter = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
 # Utility functions
 def clean_array(array, fallback=1e-6):
@@ -78,8 +77,6 @@ def func4(F, B, c, f, b):
 
 def func5(F, B, c, f, b):
     name = 'CPP'
-    if len(F.shape) > 2:
-        return name, 'RGB'
     filt = np.array([[-1/8, -1/8, -1/8], [-1/8, 1, -1/8], [-1/8, -1/8, -1/8]])
     I_hat = conv2(F, filt, mode='same')
     measure = np.mean(clean_array(I_hat))
@@ -87,8 +84,6 @@ def func5(F, B, c, f, b):
 
 def func6(F, B, c, f, b):
     name = 'PSNR'
-    if len(F.shape) > 2:
-        return name, 'RGB'
     F = clean_array(F)
     max_val = np.max(F)
     if max_val <= 0:
@@ -109,8 +104,6 @@ def func7(F, B, c, f, b):
 
 def func8(F, B, c, f, b):
     name = 'SNR2'
-    if len(F.shape) > 2:
-        return name, 'RGB'
     b = clean_array(b)
     bg_std = np.std(b)
     measure = np.mean(patch(F, 5)) / (bg_std + 1e-9)
@@ -118,8 +111,6 @@ def func8(F, B, c, f, b):
 
 def func9(F, B, c, f, b):
     name = 'SNR3'
-    if len(F.shape) > 2:
-        return name, 'RGB'
     fore_patch = patch(F, 5)
     fore_patch = clean_array(fore_patch)
     std_diff = np.std(fore_patch - np.mean(fore_patch))
@@ -129,8 +120,6 @@ def func9(F, B, c, f, b):
 
 def func10(F, B, c, f, b):
     name = 'SNR4'
-    if len(F.shape) > 2:
-        return name, 'RGB'
     fore_patch = patch(F, 5)
     back_patch = patch(B, 5)
     fore_patch = clean_array(fore_patch)
@@ -142,8 +131,6 @@ def func10(F, B, c, f, b):
 
 def func11(F, B, c, f, b):
     name = 'SNR5'
-    if len(F.shape) > 2:
-        return name, 'RGB'
     window_size = 5
     local_variance = conv2(F**2, np.ones((window_size, window_size)), mode='valid') / window_size**2 - \
                      (conv2(F, np.ones((window_size, window_size)), mode='valid') / window_size)**2
@@ -170,8 +157,6 @@ def func15(F, B, c, f, b):
 
 def func16(F, B, c, f, b):
     name = 'CNR'
-    if len(F.shape) > 2:
-        return name, 'RGB'
     fore_patch = patch(F, 5)
     back_patch = patch(B, 5)
     fore_patch = clean_array(fore_patch)
@@ -181,8 +166,6 @@ def func16(F, B, c, f, b):
 
 def func17(F, B, c, f, b):
     name = 'CVP'
-    if len(F.shape) > 2:
-        return name, 'RGB'
     fore_patch = patch(F, 5)
     fore_patch = clean_array(fore_patch)
     measure = np.std(fore_patch) / (np.mean(fore_patch) + 1e-6)
@@ -276,31 +259,70 @@ def extract_tags(image, tag_data, file_type='dicom', image_shape=None):
     return tags
 
 
-def input_data(root, manifest_path=None):
 
+    # _replace_path = '/opt/localdrive/Niffler/modules/cold-extraction/Jan2022MR/2209079/1.2.840.113970.3.57.1.65722043.20220103.1124828'
+    # for d in dirs:
+    #     dir = d.replace(_replace_path, root)
+    #     print(dir)
+
+    #     if os.path.exists(dir):
+    #         print(f'start to calculate {scan_type}s in {dir}')
+    #         calculator(dir, fname_outdir)
+    #         print(f'{dir} done')
+    #     else:
+    #         msg = f"DICOM folders [{d}] does not exist ... "
+    #         logger.error(msg)
+
+
+def _input_data_dcm(root, dir_list):
+    subjects_id = []
+    subject_types = []
+    paths = []
+    _replace_path = '/opt/localdrive/Niffler/modules/cold-extraction/Jan2022MR/2209079/1.2.840.113970.3.57.1.65722043.20220103.1124828'
+    for d in  dir_list:
+        _dir = d.replace(_replace_path, root)
+        if os.path.exists(_dir):
+            subject_id = Path(_dir).name
+            dcm_files = [str(Path(dirpath) / filename) for dirpath, _, filenames in os.walk(_dir)
+                    for filename in filenames
+                    if filename.endswith(('.dcm'))]
+            files = []
+            for dcm_file in dcm_files:
+                try:
+                    dcm_data = pydicom.dcmread(dcm_file)
+                    if 'PixelData' in dcm_data:
+                        if 'SamplesPerPixel' in dcm_data and dcm_data.SamplesPerPixel == 1:
+                            files.append(dcm_file)
+                        else:
+                            msg = f'DICOM file [{dcm_file}]\'s SamplesPerPixel is {dcm_data.SamplesPerPixel} ... '
+                            printLog(msg, logging.ERROR)
+                    else:
+                        msg = f'DICOM file [{dcm_file}] does not have image pixel data ... '
+                        printLog(msg, logging.ERROR)
+                    
+
+                except Exception as e:
+                    printLog(f"Could not read DICOM file: {dcm_file}. Error: {e}", logging.ERROR)
+            subjects_id.append(subject_id)
+            subject_types.append('dicom')
+            paths.append(files)
+        else:
+            msg = f"DICOM folders [{_dir}] does not exist ... "
+            logger.error(msg)
+
+    data = {'subject_id':subjects_id,'subject_type':'dicom','path':paths, 'dir': dir_list}
+   
+    df = pd.DataFrame(data)
+    printLog(f'The number of Series is {len(df)}.')
     
-    if manifest_path:
-        files = []
-        df_manifest = pd.read_csv(manifest_path, dtype=str)
-        manifest_files = [str(Path(root) / row["PatientID"] / row["StudyInstanceUID"] / row["SeriesInstanceUID"] / f"{row['SOPInstanceUID']}.dcm") for index, row in df_manifest.iterrows()]
-        for f in manifest_files:
-            if os.path.exists(f):
-                files.append(f)
-            else:
-                msg = f"DICOM file [{f}] does not exist ... "
-                logger.error(msg)
+    return df
 
+def input_data(root):
+    files = [str(Path(dirpath) / filename) for dirpath, _, filenames in os.walk(root)
+             for filename in filenames
+             if filename.endswith(('.dcm', '.mha', '.nii', '.gz', '.mat'))]
 
-    else:
-        files = [str(Path(dirpath) / filename) for dirpath, _, filenames in os.walk(root)
-                for filename in filenames
-                if filename.endswith(('.dcm', '.mha', '.nii', '.gz', '.mat'))]
-    if len(files) == 0:
-        print("No dicom files were found in the input dir.")
-        sys.exit(0)
-
-    all_dicom_files = [i for i in files if i.endswith('.dcm')]
-    
+    dicom_files = [i for i in files if i.endswith('.dcm')]
     mha_files = [i for i in files if i.endswith('.mha')]
     nifti_files = [i for i in files if i.endswith('.nii') or i.endswith('.gz')]
     mat_files = [i for i in files if i.endswith('.mat')]
@@ -314,22 +336,16 @@ def input_data(root, manifest_path=None):
     # Extract PatientID and construct file-based unique identifier
     dicom_pre_subjects = []
     dicom_combined_subjects = []
-    dicom_files = []
-    for dicom_file in all_dicom_files:
+
+    for dicom_file in dicom_files:
         try:
             dcm_data = pydicom.dcmread(dicom_file)
-            if 'PixelData' in dcm_data:
-                dicom_files.append(dicom_file)
-                patient_id = dcm_data.get("PatientID", "Unknown").strip()
-                dicom_pre_subjects.append(patient_id)
-                file_name = Path(dicom_file).stem
-                dicom_combined_subjects.append(f"{file_name}_{patient_id}")
-            else:
-                msg = f'DICOM file [{dicom_file}] does not have image pixel data ... '
-                logger.error(msg)
+            patient_id = dcm_data.get("PatientID", "Unknown").strip()
+            dicom_pre_subjects.append(patient_id)
+            file_name = Path(dicom_file).stem
+            dicom_combined_subjects.append(f"{file_name}_{patient_id}")
         except Exception as e:
-
-            print(f"Could not read DICOM file: {dicom_file}. Error: {e}")
+            printLog(f"Could not read DICOM file: {dicom_file}. Error: {e}", logging.ERROR)
             dicom_pre_subjects.append("Unknown")
             dicom_combined_subjects.append(f"{Path(dicom_file).stem}_Unknown")
 
@@ -338,8 +354,8 @@ def input_data(root, manifest_path=None):
     mat_subjects = [extract_subject_id(scan) for scan in mat_files]
 
     duplicateFrequencies_dicom = Counter(dicom_combined_subjects)
-    dicom_subjects = list(duplicateFrequencies_dicom.keys())
 
+    dicom_subjects = list(duplicateFrequencies_dicom.keys())
     dicom_scan_numbers = list(duplicateFrequencies_dicom.values())
     ind = [0] + list(accumulate(dicom_scan_numbers))
     dicom_splits = [dicom_files[ind[i]:ind[i+1]] for i in range(len(ind)-1)]
@@ -351,6 +367,7 @@ def input_data(root, manifest_path=None):
                              else 'mha' if subject in mhas_subjects 
                              else 'nifti' if subject in nifti_subjects 
                              else 'mat' for subject in subjects_id]}
+    
     df = pd.DataFrame(data)
     df['dicom_splits'] = [dicom_splits[dicom_subjects.index(subject)] if subject in dicom_subjects else None for subject in df['subject_id']]
     df['path'] = [path if subject_type == 'dicom' else
@@ -361,7 +378,7 @@ def input_data(root, manifest_path=None):
                   for path, subject, subject_type in zip(df['dicom_splits'], df['subject_id'], df['subject_type'])]
     df.drop('dicom_splits', axis=1, inplace=True)
 
-    print(f'The number of participants is {len(df)}.')
+    # print(f'The number of participants is {len(df)}.')
     return df
 
 
@@ -372,14 +389,16 @@ def volume(name, scans, subject_type, tag_data, middle_size=100):
     volumes = []
     if subject_type == 'dicom':
         scans = scans[int(0.005 * len(scans) * (100 - middle_size)):int(0.005 * len(scans) * (100 + middle_size))]
+        
         inf = pydicom.dcmread(scans[0])
         tags = extract_tags(inf, tag_data, file_type='dicom')
+        
         # Convert tags to DataFrame if it's not already
         if isinstance(tags, dict):
             tags = pd.DataFrame.from_dict(tags, orient='index', columns=['Value']).reset_index()
             tags.rename(columns={'index': 'Tag'}, inplace=True)
         
-        first_row = {'Tag': 'Participant ID', 'Value': f"{name}"}
+        first_row = {'Tag': 'SeriesInstanceUID', 'Value': f"{name}"}
         tags.loc[-1] = first_row
         tags.index = tags.index + 1
         tags = tags.sort_index()
@@ -425,7 +444,7 @@ def volume(name, scans, subject_type, tag_data, middle_size=100):
 class IQM(dict):
 
     def __init__(self, v, participant, total_participants, participant_index, subject_type, total_tags, metric_functions):
-        print(f'-------------- Participant {participant_index} out of {total_participants} with the {subject_type} type: {participant} --------------')
+        # print(f'-------------- Participant {participant_index} out of {total_participants} with the {subject_type} type: {participant} --------------')
         dict.__init__(self)
         self["warnings"] = [] 
         self["output"] = []
@@ -434,7 +453,7 @@ class IQM(dict):
         #     maskfolder = Path(fname_outdir / 'foreground_masks')
         #     (maskfolder / participant).mkdir(parents=True, exist_ok=True)
         # directory_path.mkdir(parents=True, exist_ok=True)
-        self.addToPrintList(0, participant, "Participant", participant, 25)
+        # self.addToPrintList(0, participant, "Participant", participant, 25)
         count = 1
         for volume_data in v:
             if isinstance(volume_data, tuple) and len(volume_data) == 2:
@@ -453,41 +472,42 @@ class IQM(dict):
 
         participant_scan_number = int(np.ceil(images.shape[0] / sample_size))
         self["participant_scan_number"] = participant_scan_number 
-        self["os_handle"] = images      
+        self["os_handle"] = images   
         outputs_list = []
         for j in range(0, images.shape[0], sample_size):
             I = images[j, :, :]
-            folder = Path(fname_outdir)
+            # folder = Path(fname_outdir)
+            #
             # self.save_image(participant, I, j, folder)
             if scan_type == "CT": 
                 I = I - np.min(I)  # Apply intensity adjustment only for CT scans 
             F, B, c, f, b = self.foreground(I)
+            # REMOVE SAVE IMAGE MASKS
             # if save_masks_flag != False: 
             #     self.save_image(participant, c, j, maskfolder)
-                
+
+            # TODO handle RBG
+            
             outputs = {}
             for func in metric_functions:
                 name, measure = func(F, B, c, f, b)
                 outputs[name] = measure
             outputs_list.append(outputs)
-        print(f'The number of {participant_scan_number} scans were saved to {fname_outdir / participant} directory.')
+        # print(f'The number of {participant_scan_number} scans were saved to {fname_outdir / participant} directory.')
         # if save_masks_flag != False: 
         #     print(f'The number of {participant_scan_number} masks were also saved to {maskfolder / participant} directory.')
         
         # self.addToPrintList(1, participant, "Name of Images", os.listdir(directory_path), 25)
-        self.addToPrintList(1, participant, "Name of Images", directory_path, 25)
-        count += 1
+        # count += 1
         self.addToPrintList(count, participant, "NUM", participant_scan_number, total_metrics)
         averages = {}
         for key in outputs_list[0].keys():
             values = [dic[key] for dic in outputs_list]
-            if all(isinstance(item, str) for item in values):
-                averages[key] = None
-            else:
-                averages[key] = np.mean(values) 
-            count += 1
-            self.addToPrintList(count, participant, key, averages[key], total_metrics)
-
+            self.addToPrintList(count, participant, f'{key}_mean', np.mean(values), total_metrics)
+            self.addToPrintList(count, participant, f'{key}_std', np.std(values), total_metrics)
+            self.addToPrintList(count, participant, f'{key}_median', np.median(values), total_metrics)
+            self.addToPrintList(count, participant, f'{key}_min', np.min(values) if len(values) > 0 else math.nan, total_metrics)
+            self.addToPrintList(count, participant, f'{key}_max', np.max(values) if len(values) > 0 else math.nan, total_metrics)
     
     def save_image(self, participant, I, index, folder):
         # Ensure the folder exists
@@ -535,8 +555,8 @@ class IQM(dict):
     def addToPrintList(self, count, participant, metric, value, total_metrics):
         self[metric] = value
         self["output"].append(metric)
-        if metric != 'Name of Images' and metric != 'Participant':
-            print(f'{count}/{total_metrics-1}) The {metric} of the participant {participant} is {value}.')
+        # if metric != 'Name of Images' and metric != 'Participant':
+        #     print(f'{count}/{total_metrics-1}) The {metric} of the participant {participant} is {value}.')
 
     def get_participant_scan_number(self): 
         return self["participant_scan_number"]
@@ -573,6 +593,13 @@ def print_msg_box(msg, indent=1, width=None, title=None):
     box += f'╚{"═" * (width + indent * 2)}╝' 
     print(box)   
 
+def printLog(msg, level=logging.INFO):
+    logger.log(level, msg)
+    current_time = time.localtime()
+    asctime = time.asctime(current_time)
+    print(f'{asctime} - {__name__} - {logging.getLevelName(level)} - {msg}')
+    
+
 
 def main(args):
     global save_masks_flag, sample_size, middle_size, scan_type, fname_outdir, overwrite_flag, headers
@@ -585,37 +612,41 @@ def main(args):
     middle_size = args.u
     scan_type = args.t
     overwrite_flag = "w"
-
-    print(f'RadQy for the {scan_type} data is starting....')
-
+    
+    # print(f'middle_size: {middle_size}')
+    printLog(f'middle_size: {middle_size}')
+    # print(f'RadQy for the {scan_type} data is starting....')
+    printLog(f'RadQy for the {scan_type} data is starting....')
+    #
+    start_time = time.time() 
     headers.append(f"start_time:\t{datetime.datetime.now()}")
-    print_forlder_note = Path.cwd() / 'UserInterface'
+    print_folder_note = Path.cwd() / 'UserInterface'
     output_folder_name = args.output_folder_name
-    fname_outdir = print_forlder_note / 'Data' / output_folder_name
+    fname_outdir = print_folder_note / 'Data' / output_folder_name
     headers.append(f"outdir:\t{Path(fname_outdir).resolve()}")
     headers.append(f"scantype:\t{scan_type}")
+    headers.append(f"samplesize:\t{sample_size}")
+    headers.append(f"middlesize:\t{middle_size}")
 
-
-    # genearte log
+    # CHANGE START
+    # make output directory
     Path(fname_outdir).mkdir(parents=True, exist_ok=True)
-    error_file_handler = logging.FileHandler(Path(fname_outdir) / 'error.log')
-    error_file_handler.setLevel(logging.ERROR)
-    # Create a formatter for the log messages
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # set logging 
 
-    # Add the formatter to the file handler
-    error_file_handler.setFormatter(formatter)
-
-    # Add the file handler to the logger
-    logger.addHandler(error_file_handler)
-
-
-    df = input_data(root, manifest_file)
+    logging.basicConfig(
+        filename = Path(fname_outdir) / 'radqy.log',
+        level=logging.INFO,
+        format=log_formatter,
+        filemode ='a')
+    
+    df_manifest = pd.read_csv(manifest_file, dtype=str)
+    # Get all values from 'ColumnA' as a list
+    dirs = df_manifest['Directory'].tolist()
+    # CHANGE END
+    df = _input_data_dcm(root, dirs)
     total_participants = len(df)
-    if total_participants == 0:
-        print("No participant found ...")
-        sys.exit(0)
-
+    
+    
     functions = [func for name, func in inspect.getmembers(sys.modules[__name__]) if name.startswith('func')]
     functions = sorted(functions, key=lambda f: int(re.search(r'\d+', f.__name__).group()))
 
@@ -637,31 +668,42 @@ def main(args):
 
     total_scans = 0
     for i in range(total_participants):
+
         participant_index = i + 1
         name = df['subject_id'][i]
         scans = df['path'][i]
         subject_type = df['subject_type'][i]
-        v = volume(name, scans, subject_type, tag_data)
+        _dir_str = df['dir'][i]
+        if len(scans) < 1:
+            printLog(f'No varified {scan_type}s in {_dir_str}', logging.WARNING)
+            continue
+
+        printLog(f'start to calculate {scan_type}s in {_dir_str}')
+
+        v = volume(name, scans, subject_type, tag_data, middle_size)
+
         s = IQM(v, name, total_participants, participant_index, subject_type, total_tags, functions)
+        
         total_scans += s.get_participant_scan_number()
         worker_callback(s, fname_outdir)
-
+        printLog(f'{_dir_str} done.')
     address = Path(fname_outdir) / "results.tsv"
-    cf = pd.read_csv(address, sep='\t', skiprows=4, header=0)
-    cf = cf.drop(['Name of Images'], axis=1)
+    cf = pd.read_csv(address, sep='\t', skiprows=6, header=0)
+    # cf = cf.drop(['Name of Images'], axis=1)
     cf = cf.fillna('N/A')
     cf.to_csv(Path(fname_outdir) / 'IQM.csv', index=False)
 
-    print(f"The IQMs data are saved in the {Path(fname_outdir) / 'IQM.csv'} file.")
-    print("Done!")
-    print("RadQy backend took", format((time.time() - time.time()) / 60, '.2f'),
-          f"minutes for {total_participants} subjects and the overall {total_scans} {scan_type} scans to run.")
 
-    print_folder_path = Path(print_forlder_note)
+
+    printLog(f"The IQMs data are saved in the {Path(fname_outdir) / 'IQM.csv'} file.")
+    printLog("Done!")
+    printLog(f"RadQy backend took {format((time.time() - start_time) / 60, '.2f')} minutes for {total_participants} subjects and the overall {total_scans} {scan_type} scans to run.")
+
+    print_folder_path = Path(print_folder_note)
     results_file_path = Path(fname_outdir) / "results.tsv"
-    msg = (f"Please go to the '{print_folder_path}' directory and open up the 'index.html' file.\n"
-           f"Click on 'View Results' and select '{results_file_path}' file.\n")
-    print_msg_box(msg, indent=3, width=None, title="To view the final MRQy interface results:")
+    # msg = (f"Please go to the '{print_folder_path}' directory and open up the 'index.html' file.\n"
+    #        f"Click on 'View Results' and select '{results_file_path}' file.\n")
+    # print_msg_box(msg, indent=3, width=None, title="To view the final MRQy interface results:")
 
 ###############################################################################################
 
@@ -680,7 +722,5 @@ if __name__ == '__main__':
     parser.add_argument('-s', type=lambda x: False if x == '0' else x, default=False)
     parser.add_argument('-b', type=int, default=1)
     parser.add_argument('-u', type=int, default=100)
-    parser.add_argument('-m', type=str, default=None)
-    parser.add_argument('-t', type=str, default="MRI")
     args = parser.parse_args()
     main(args)
