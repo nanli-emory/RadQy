@@ -278,6 +278,7 @@ def _input_data_dcm(root, dir_list):
     subjects_id = []
     subject_types = []
     paths = []
+    varified_dirs = []
     _replace_path = '/opt/localdrive'
     for d in  dir_list:
         _dir = d.replace(_replace_path, root)
@@ -306,11 +307,12 @@ def _input_data_dcm(root, dir_list):
             subjects_id.append(subject_id)
             subject_types.append('dicom')
             paths.append(files)
+            varified_dirs.append(_dir)
         else:
             msg = f"DICOM folders [{_dir}] does not exist ... "
             logger.error(msg)
 
-    data = {'subject_id':subjects_id,'subject_type':'dicom','path':paths, 'dir': dir_list}
+    data = {'subject_id':subjects_id,'subject_type':'dicom','path':paths, 'dir': varified_dirs}
    
     df = pd.DataFrame(data)
     printLog(f'The number of Series is {len(df)}.')
