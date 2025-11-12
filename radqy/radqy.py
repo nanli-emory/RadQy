@@ -278,7 +278,7 @@ def _input_data_dcm(root, dir_list):
     subjects_id = []
     subject_types = []
     paths = []
-    _replace_path = '/opt/localdrive/Niffler/modules/cold-extraction/Jan2022MR/2209079/1.2.840.113970.3.57.1.65722043.20220103.1124828'
+    _replace_path = '/opt/localdrive'
     for d in  dir_list:
         _dir = d.replace(_replace_path, root)
         if os.path.exists(_dir):
