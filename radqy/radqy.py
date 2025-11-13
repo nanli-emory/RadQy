@@ -647,7 +647,9 @@ def main(args):
     # CHANGE END
     df = _input_data_dcm(root, dirs)
     total_participants = len(df)
-    
+    if total_participants == 0:
+        printLog(f'There is no series found in input directory - {root} ...')
+        sys.exit(0)
     
     functions = [func for name, func in inspect.getmembers(sys.modules[__name__]) if name.startswith('func')]
     functions = sorted(functions, key=lambda f: int(re.search(r'\d+', f.__name__).group()))
