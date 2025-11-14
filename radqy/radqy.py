@@ -280,6 +280,7 @@ def _input_data_dcm(root, dir_list):
     paths = []
     varified_dirs = []
     _replace_path = '/opt/localdrive'
+    # _replace_path = '/opt/localdrive/Niffler/modules/cold-extraction/Jan2022MR/2209079/1.2.840.113970.3.57.1.65722043.20220103.1124828'
     for d in  dir_list:
         _dir = d.replace(_replace_path, root)
         if os.path.exists(_dir):
@@ -387,11 +388,13 @@ def input_data(root):
 
 
 
-def volume(name, scans, subject_type, tag_data, middle_size=100):
+def volume(name, __scans, subject_type, tag_data, middle_size=100):
     volumes = []
     if subject_type == 'dicom':
-        scans = scans[int(0.005 * len(scans) * (100 - middle_size)):int(0.005 * len(scans) * (100 + middle_size))]
-        
+        scans = __scans[int(0.005 * len(__scans) * (100 - middle_size)):int(0.005 * len(__scans) * (100 + middle_size))]
+        if len(scans) < 1:
+            scans = __scans
+
         inf = pydicom.dcmread(scans[0])
         tags = extract_tags(inf, tag_data, file_type='dicom')
         
