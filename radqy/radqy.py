@@ -289,22 +289,35 @@ def _input_data_dcm(root, dir_list):
                     for filename in filenames
                     if filename.endswith(('.dcm'))]
             files = []
+            shapes = []
             for dcm_file in dcm_files:
                 try:
                     dcm_data = pydicom.dcmread(dcm_file)
                     if 'PixelData' in dcm_data:
                         if 'SamplesPerPixel' in dcm_data and dcm_data.SamplesPerPixel == 1:
+        
                             files.append(dcm_file)
+                            shapes.append(dcm_data.pixel_array.shape)
+
                         else:
                             msg = f'DICOM file [{dcm_file}]\'s SamplesPerPixel is {dcm_data.SamplesPerPixel} ... '
                             printLog(msg, logging.ERROR)
                     else:
                         msg = f'DICOM file [{dcm_file}] does not have image pixel data ... '
                         printLog(msg, logging.ERROR)
-                    
-
                 except Exception as e:
                     printLog(f"Could not read DICOM file: {dcm_file}. Error: {e}", logging.ERROR)
+                    continue
+            # shape of images must have the same
+            if len(set(shapes)) > 1: 
+                msg = f'All images must have the same shape in f{subject_id}'
+                printLog(msg, logging.ERROR)
+                continue
+            # check have dicom files 
+            if len(files) == 0:
+                msg = f'No valid images in f{subject_id}'
+                printLog(msg, logging.ERROR)
+                continue
             subjects_id.append(subject_id)
             subject_types.append('dicom')
             paths.append(files)
@@ -653,7 +666,11 @@ def main(args):
     if total_participants == 0:
         printLog(f'There is no series found in input directory - {root} ...')
         sys.exit(0)
-    
+
+    # generate input mapping file
+    df.to_csv(Path(fname_outdir) / 'subject_files_mapping.csv', index=False)
+    printLog(f"The subject images mapping file is saved in the {Path(fname_outdir) / 'subject_files_mapping.csv'} file.")
+
     functions = [func for name, func in inspect.getmembers(sys.modules[__name__]) if name.startswith('func')]
     functions = sorted(functions, key=lambda f: int(re.search(r'\d+', f.__name__).group()))
 
@@ -675,25 +692,28 @@ def main(args):
 
     total_scans = 0
     for i in range(total_participants):
+        try:
+            participant_index = i + 1
+            name = df['subject_id'][i]
+            scans = df['path'][i]
+            subject_type = df['subject_type'][i]
+            _dir_str = df['dir'][i]
+            if len(scans) < 1:
+                printLog(f'No varified {scan_type}s in {_dir_str}', logging.WARNING)
+                continue
+            # add try and catch 
+            printLog(f'start to calculate {scan_type}s in {_dir_str}')
 
-        participant_index = i + 1
-        name = df['subject_id'][i]
-        scans = df['path'][i]
-        subject_type = df['subject_type'][i]
-        _dir_str = df['dir'][i]
-        if len(scans) < 1:
-            printLog(f'No varified {scan_type}s in {_dir_str}', logging.WARNING)
+            v = volume(name, scans, subject_type, tag_data, middle_size)
+
+            s = IQM(v, name, total_participants, participant_index, subject_type, total_tags, functions)
+            
+            total_scans += s.get_participant_scan_number()
+            worker_callback(s, fname_outdir)
+            printLog(f'{_dir_str} done.')
+        except Exception as e:
+            printLog(f"DICOM file: {name}. Error: {e}", logging.ERROR)
             continue
-
-        printLog(f'start to calculate {scan_type}s in {_dir_str}')
-
-        v = volume(name, scans, subject_type, tag_data, middle_size)
-
-        s = IQM(v, name, total_participants, participant_index, subject_type, total_tags, functions)
-        
-        total_scans += s.get_participant_scan_number()
-        worker_callback(s, fname_outdir)
-        printLog(f'{_dir_str} done.')
     address = Path(fname_outdir) / "results.tsv"
     cf = pd.read_csv(address, sep='\t', skiprows=6, header=0)
     # cf = cf.drop(['Name of Images'], axis=1)
